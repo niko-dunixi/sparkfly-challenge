@@ -1,0 +1,3 @@
+.PHONY: test
+test:
+	go test -v github.com/paul-nelson-baker/sparkfly-challenge/...
