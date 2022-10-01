@@ -44,9 +44,13 @@ func TestCompressorAsReader(t *testing.T) {
 			t.Run(fmt.Sprintf("%dmb", currentMB), func(t *testing.T) {
 				t.Parallel()
 				// Create our testable reader with an expected sha256 sum to validate
-				inputReader, expectedSha256Sum := generateRandomFile(t, 1024*1024*currentMB)
+				inputFile, expectedSha256Sum := generateRandomFile(t, 1024*1024*currentMB)
+				defer func() {
+					inputFile.Close()
+					_ = os.Remove(inputFile.Name())
+				}()
 				// Create our Compression Reader
-				reader := AsReader(inputReader)
+				reader := AsReader(inputFile)
 				// Unzip and hash the bytes, compare them against the generated hash
 				// to be sure we're doing things correctly
 				gzipReader, err := gzip.NewReader(reader)
@@ -64,7 +68,7 @@ func TestCompressorAsReader(t *testing.T) {
 	})
 }
 
-func generateRandomFile(t *testing.T, totalBytes int) (reader io.ReadCloser, expectedSha256Sum string) {
+func generateRandomFile(t *testing.T, totalBytes int) (file *os.File, expectedSha256Sum string) {
 	t.Helper()
 	// Create a new random file anc create a hasher. We will use a multi-writer
 	// to store the random bytes and generate a sum we can check in our test
@@ -75,31 +79,23 @@ func generateRandomFile(t *testing.T, totalBytes int) (reader io.ReadCloser, exp
 	}
 	shaHasher := sha256.New()
 	writer := io.MultiWriter(file, shaHasher)
-	func() {
-		// We create a nested function so we can be sure that the temporary file is
-		// closed when we've completed writing but before we return.
-		defer file.Close()
-		// Create our buffer and interate while we haven't hit our byte count
-		bytesWritten := 0
-		byteBuffer := make([]byte, 1024)
-		for bytesWritten < totalBytes {
-			// Create an intermedate buffer that is dynamically sized so we can write exactly
-			// the number of bytes we want.
-			intermediateBuffer := byteBuffer[:min(len(byteBuffer), totalBytes-bytesWritten)]
-			_, _ = random.Read(intermediateBuffer)
-			n, err := writer.Write(intermediateBuffer)
-			if err != nil {
-				panic(err)
-			}
-			bytesWritten += n
+	// Create our buffer and interate while we haven't hit our byte count
+	bytesWritten := 0
+	byteBuffer := make([]byte, 1024)
+	for bytesWritten < totalBytes {
+		// Create an intermedate buffer that is dynamically sized so we can write exactly
+		// the number of bytes we want.
+		intermediateBuffer := byteBuffer[:min(len(byteBuffer), totalBytes-bytesWritten)]
+		_, _ = random.Read(intermediateBuffer)
+		n, err := writer.Write(intermediateBuffer)
+		if err != nil {
+			panic(err)
 		}
-	}()
-	// Return the file for reading with the sum for validation in the test
-	fileReader, err := os.Open(file.Name())
-	if err != nil {
-		panic(err)
+		bytesWritten += n
 	}
-	return fileReader, hex.EncodeToString(shaHasher.Sum(nil))
+	// Reset the file's seek location for reading at the beginning
+	_, _ = file.Seek(0, 0)
+	return file, hex.EncodeToString(shaHasher.Sum(nil))
 }
 
 type Int interface {
@@ -113,6 +109,10 @@ func min[T Int](a, b T) T {
 	return b
 }
 
+// FIXME: This may be a potentially huge optimzation of the randomness generation,
+// but for now we'll leave our naive implementation because the test would still
+// need to consume both readers or we end up with blocked logic.
+//
 // func RandomBytes(total int) (input io.ReadCloser, expected io.Reader) {
 // 	random := rand.New(rand.NewSource(time.Now().Unix()))
 // 	pipeReader, pipeWriter := io.Pipe()
