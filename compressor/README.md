@@ -14,7 +14,7 @@ import (
 
 func main() {
   yourUncompressedReader := // this will be a io.ReadCloser of your choosing
-  compressedReader := compressor.AsReader(yourConompressedReader)
+  compressedReader := compressor.AsReader(yourUncompressedReader)
   _ = consumeReader(compressedReader)
 }
 
