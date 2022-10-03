@@ -25,7 +25,7 @@ func AsReader(input io.ReadCloser) io.Reader {
 		// however, the standard library's version checks the underlying
 		// types of the Readers and Writers for optimized method calls
 		if _, err := io.Copy(gzipWriter, input); err != nil {
-			panic(err)
+			pipeWriter.CloseWithError(err)
 		}
 	}()
 	return pipeReader

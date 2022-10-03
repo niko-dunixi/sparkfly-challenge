@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -119,3 +120,22 @@ func min[T Int](a, b T) T {
 // 	teeReader := io.TeeReader(random, pipeWriter)
 // 	return ioutil.NopCloser(teeReader), pipeReader
 // }
+
+func TestCompressorHandlesErr(t *testing.T) {
+	// Simulate generic ReaderCloser, but this one will always throw an error
+	var input io.ReadCloser = ioutil.NopCloser(readerWillErr{})
+	// Convert this reader to a CompressionReader for downstream consumers
+	reader := AsReader(input)
+	// Validate that the error didn't blow us up
+	_, err := ioutil.ReadAll(reader)
+	assert.True(t, errors.Is(err, errExpected))
+}
+
+var errExpected = fmt.Errorf("this error was expected, but should not panic")
+
+type readerWillErr struct {
+}
+
+func (r readerWillErr) Read(b []byte) (n int, err error) {
+	return -1, errExpected
+}
